@@ -29,9 +29,10 @@ def home():
 
 @app.post("/separar")
 async def separar(background_tasks: BackgroundTasks, file: UploadFile = File(...)):
-    temp_input = f"temp_{file.filename}"
-    output_dir = f"salida_{os.path.splitext(file.filename)[0]}"
-    zip_filename = f"stems_{os.path.splitext(file.filename)[0]}.zip"
+    filename_clean = "".join([c for c in file.filename if c.isalnum() or c in (".", "_", "-")])
+    temp_input = f"temp_{filename_clean}"
+    output_dir = f"salida_{os.path.splitext(filename_clean)[0]}"
+    zip_filename = f"stems_{os.path.splitext(filename_clean)[0]}.zip"
     
     with open(temp_input, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
@@ -40,19 +41,25 @@ async def separar(background_tasks: BackgroundTasks, file: UploadFile = File(...
         if os.path.exists(output_dir):
             shutil.rmtree(output_dir)
 
-        # Ejecutar Demucs capturando salidas y errores
-        cmd = f'python -m demucs.separate -n htdemucs --two-stems=vocals -o "{output_dir}" "{temp_input}"'
+        # RUTA EXACTA DEL PYTHON DEL ENTORNO VIRTUAL
+        python_executable = os.path.join(os.getcwd(), ".venv", "bin", "python")
+        if not os.path.exists(python_executable):
+            python_executable = "python"
+
+        cmd = f'"{python_executable}" -m demucs.separate -n htdemucs --two-stems=vocals -o "{output_dir}" "{temp_input}"'
+        
         result = subprocess.run(cmd, shell=True, check=True, capture_output=True, text=True)
         print("Demucs Output:", result.stdout)
-        
-        song_name = os.path.splitext(file.filename)[0]
-        stems_folder = os.path.join(output_dir, "htdemucs", song_name)
 
+        # Buscador dinámico de pistas para que el ZIP no salga vacío
+        archivos_encontrados = 0
         with zipfile.ZipFile(zip_filename, 'w', zipfile.ZIP_DEFLATED) as zipf:
-            for root, _, files in os.walk(stems_folder):
+            for root, _, files in os.walk(output_dir):
                 for f in files:
-                    file_path = os.path.join(root, f)
-                    zipf.write(file_path, arcname=f)
+                    if f.endswith(('.wav', '.mp3', '.flac')):
+                        file_path = os.path.join(root, f)
+                        zipf.write(file_path, arcname=f)
+                        archivos_encontrados += 1
 
         background_tasks.add_task(borrar_archivo, zip_filename)
         if os.path.exists(output_dir):
