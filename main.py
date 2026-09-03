@@ -1,4 +1,5 @@
 import os
+import sys
 import shutil
 import zipfile
 import subprocess
@@ -46,7 +47,8 @@ async def separar(background_tasks: BackgroundTasks, file: UploadFile = File(...
         if not os.path.exists(python_executable):
             python_executable = "python"
 
-        cmd = f'"{python_executable}" -m demucs.separate -n htdemucs --two-stems=vocals -o "{output_dir}" "{temp_input}"'
+        # sys.executable apunta exactamente al Python del entorno virtual activo
+        cmd = f'"{sys.executable}" -m demucs.separate -n htdemucs --two-stems=vocals -o "{output_dir}" "{temp_input}"'
         
         result = subprocess.run(cmd, shell=True, check=True, capture_output=True, text=True)
         print("Demucs Output:", result.stdout)
